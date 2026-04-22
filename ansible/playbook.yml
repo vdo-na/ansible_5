@@ -1,13 +1,11 @@
 ---
 - name: Полная настройка серверов (Практика 5)
   hosts: webservers
-  become: yes # Выполняем все от имени root (через sudo)
+  become: yes 
   
   vars:
-    # 2. Переменная с версией ПО
     software_version: "2.0.2-1" 
     
-    # 8. Переменные для выгрузки репозиториев
     git_repos:
       - { url: 'https://github.com/expressjs/express.git', dest: '/opt/express' }
       - { url: 'https://github.com/socketio/socket.io.git', dest: '/opt/socketio' }
@@ -18,22 +16,20 @@
       ansible.builtin.apt:
         update_cache: yes
 
-    # ТРЕБОВАНИЕ 1: Файл с временем в домашней директории пользователя
     - name: 1. Запись времени и пользователя (идемпотентно)
       ansible.builtin.copy:
-        content: "User: {{ ansible_user_id }}\nTime: {{ ansible_date_time.iso8601 }}"
+        content: "User: {{ ansible_user }}\nTime: {{ ansible_date_time.iso8601 }}"
         dest: "/home/vagrant/info.txt"
         owner: vagrant
         group: vagrant
-        force: no # Не перезаписывать, если файл уже есть
+        force: no
+      become: no
 
-    # ТРЕБОВАНИЕ 2: Установка конкретной версии ПО (tree)
     - name: 2. Установка пакета tree конкретной версии
       ansible.builtin.apt:
         name: "tree={{ software_version }}"
         state: present
 
-    # ТРЕБОВАНИЕ 3: Подключение репозитория Nginx
     - name: 3.1 Добавление ключа Nginx
       ansible.builtin.apt_key:
         url: https://nginx.org/keys/nginx_signing.key
@@ -49,7 +45,6 @@
         name: nginx
         state: present
 
-    # ТРЕБОВАНИЕ 4: Замена строки (меняем порт)
     - name: 4. Изменение порта в конфигурации Nginx
       ansible.builtin.replace:
         path: /etc/nginx/conf.d/default.conf
@@ -57,7 +52,6 @@
         replace: 'listen       8080;'
       notify: Перезапуск Nginx
 
-    # ТРЕБОВАНИЕ 5: Шаблон Jinja2 с резервной копией
     - name: 5. Замена файла конфига шаблоном с созданием backup
       ansible.builtin.template:
         src: templates/nginx.conf.j2
@@ -65,17 +59,15 @@
         backup: yes
       notify: Перезапуск Nginx
 
-    # ТРЕБОВАНИЕ 6: Скачивание файла с ретраями
     - name: 6. Скачивание README файла Ansible
       ansible.builtin.get_url:
         url: https://raw.githubusercontent.com/ansible/ansible/devel/README.md
-        dest: /tmp/ansible_readme.md
+        dest: /home/vagrant/ansible_readme.md
       register: download_result
       until: download_result is succeeded
       retries: 3
       delay: 5
 
-    # ТРЕБОВАНИЕ 7: Добавление cron-задачи
     - name: 7. Добавление cron-задачи очистки apt
       ansible.builtin.cron:
         name: "Clear apt cache"
@@ -84,19 +76,17 @@
         weekday: "0"
         job: "/usr/bin/apt-get clean"
 
-    # Установка npm и git для следующего шага
     - name: Установка git и npm
       ansible.builtin.apt:
         name: ['git', 'npm']
         state: present
 
-    # ТРЕБОВАНИЕ 8: Цикл для 3-х git-репозиториев
     - name: 8.1 Выгрузка git-репозиториев
       ansible.builtin.git:
         repo: "{{ item.url }}"
         dest: "{{ item.dest }}"
         version: master
-        update: no # <--- Добавляем эту строчку
+        update: no 
       loop: "{{ git_repos }}"
 
     - name: 8.2 Установка зависимостей npm
@@ -107,7 +97,6 @@
       args:
         creates: "{{ item.dest }}/node_modules"
 
-  # ТРЕБОВАНИЕ 9: Перезапуск демона (Handlers)
   handlers:
     - name: Перезапуск Nginx
       ansible.builtin.service:
